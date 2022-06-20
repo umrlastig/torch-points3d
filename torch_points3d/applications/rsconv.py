@@ -1,5 +1,3 @@
-import os
-import sys
 import queue
 from omegaconf import DictConfig, OmegaConf
 import logging
@@ -13,17 +11,13 @@ from torch_points3d.core.common_modules.dense_modules import Conv1D
 from torch_points3d.core.common_modules.base_modules import Seq
 from .utils import extract_output_nc
 
-CUR_FILE = os.path.realpath(__file__)
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))
-PATH_TO_CONFIG = os.path.join(DIR_PATH, "conf/rsconv")
-
 log = logging.getLogger(__name__)
 
 
 def RSConv(
     architecture: str = None, input_nc: int = None, num_layers: int = None, config: DictConfig = None, *args, **kwargs
 ):
-    """ Create a RSConv backbone model based on the architecture proposed in
+    """Create a RSConv backbone model based on the architecture proposed in
     https://arxiv.org/abs/1904.07601
 
     Parameters
@@ -47,24 +41,10 @@ def RSConv(
 
 class RSConvFactory(ModelFactory):
     def _build_unet(self):
-        if self._config:
-            model_config = self._config
-        else:
-            path_to_model = os.path.join(PATH_TO_CONFIG, "unet_{}.yaml".format(self.num_layers))
-            model_config = OmegaConf.load(path_to_model)
-        ModelFactory.resolve_model(model_config, self.num_features, self._kwargs)
-        modules_lib = sys.modules[__name__]
-        return RSConvUnet(model_config, None, None, modules_lib, **self.kwargs)
+        return self._build_unet_base(RSConvUnet, "conf/rsconv", __name__)
 
     def _build_encoder(self):
-        if self._config:
-            model_config = self._config
-        else:
-            path_to_model = os.path.join(PATH_TO_CONFIG, "encoder_{}.yaml".format(self.num_layers))
-            model_config = OmegaConf.load(path_to_model)
-        ModelFactory.resolve_model(model_config, self.num_features, self._kwargs)
-        modules_lib = sys.modules[__name__]
-        return RSConvEncoder(model_config, None, None, modules_lib, **self.kwargs)
+        return self._build_encoder_base(RSConvEncoder, "conf/rsconv", __name__)
 
 
 class RSConvBase(UnwrappedUnetBasedModel):
@@ -120,7 +100,7 @@ class RSConvEncoder(RSConvBase):
         )
 
     def forward(self, data, *args, **kwargs):
-        """ This method does a forward on the Unet
+        """This method does a forward on the Unet
 
         Parameters:
         -----------
@@ -162,7 +142,7 @@ class RSConvUnet(RSConvBase):
         )
 
     def forward(self, data, *args, **kwargs):
-        """ This method does a forward on the Unet
+        """This method does a forward on the Unet
 
         Parameters:
         -----------

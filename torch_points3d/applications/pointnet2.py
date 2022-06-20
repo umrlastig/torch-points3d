@@ -1,5 +1,3 @@
-import os
-import sys
 from omegaconf import DictConfig, OmegaConf
 import logging
 
@@ -11,10 +9,6 @@ from torch_points3d.datasets.multiscale_data import MultiScaleBatch
 from torch_points3d.core.common_modules.dense_modules import Conv1D
 from torch_points3d.core.common_modules.base_modules import Seq
 from .utils import extract_output_nc
-
-CUR_FILE = os.path.realpath(__file__)
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))
-PATH_TO_CONFIG = os.path.join(DIR_PATH, "conf/pointnet2")
 
 log = logging.getLogger(__name__)
 
@@ -28,21 +22,21 @@ def PointNet2(
     *args,
     **kwargs
 ):
-    """ Create a PointNet2 backbone model based on the architecture proposed in
-    https://arxiv.org/abs/1706.02413
+    """Create a PointNet2 backbone model based on the architecture proposed in
+     https://arxiv.org/abs/1706.02413
 
-    Parameters
-    ----------
-    architecture : str, optional
-        Architecture of the model, choose from unet, encoder and decoder
-    input_nc : int, optional
-        Number of channels for the input
-   output_nc : int, optional
-        If specified, then we add a fully connected head at the end of the network to provide the requested dimension
-    num_layers : int, optional
-        Depth of the network
-    config : DictConfig, optional
-        Custom config, overrides the num_layers and architecture parameters
+     Parameters
+     ----------
+     architecture : str, optional
+         Architecture of the model, choose from unet, encoder and decoder
+     input_nc : int, optional
+         Number of channels for the input
+    output_nc : int, optional
+         If specified, then we add a fully connected head at the end of the network to provide the requested dimension
+     num_layers : int, optional
+         Depth of the network
+     config : DictConfig, optional
+         Custom config, overrides the num_layers and architecture parameters
     """
     factory = PointNet2Factory(
         architecture=architecture,
@@ -57,29 +51,12 @@ def PointNet2(
 
 class PointNet2Factory(ModelFactory):
     def _build_unet(self):
-        if self._config:
-            model_config = self._config
-        else:
-            path_to_model = os.path.join(
-                PATH_TO_CONFIG, "unet_{}_{}.yaml".format(self.num_layers, "ms" if self.kwargs["multiscale"] else "ss")
-            )
-            model_config = OmegaConf.load(path_to_model)
-        ModelFactory.resolve_model(model_config, self.num_features, self._kwargs)
-        modules_lib = sys.modules[__name__]
-        return PointNet2Unet(model_config, None, None, modules_lib, **self.kwargs)
+        config_file = "unet_{}_{}.yaml".format(self.num_layers, "ms" if self.kwargs["multiscale"] else "ss")
+        return self._build_unet_base(PointNet2Unet, "conf/pointnet2", __name__, config_file)
 
     def _build_encoder(self):
-        if self._config:
-            model_config = self._config
-        else:
-            path_to_model = os.path.join(
-                PATH_TO_CONFIG,
-                "encoder_{}_{}.yaml".format(self.num_layers, "ms" if self.kwargs["multiscale"] else "ss"),
-            )
-            model_config = OmegaConf.load(path_to_model)
-        ModelFactory.resolve_model(model_config, self.num_features, self._kwargs)
-        modules_lib = sys.modules[__name__]
-        return PointNet2Encoder(model_config, None, None, modules_lib, **self.kwargs)
+        config_file = "encoder_{}_{}.yaml".format(self.num_layers, "ms" if self.kwargs["multiscale"] else "ss")
+        return self._build_encoder_base(PointNet2Encoder, "conf/pointnet2", __name__, config_file)
 
 
 class BasePointnet2(UnwrappedUnetBasedModel):
@@ -112,8 +89,7 @@ class BasePointnet2(UnwrappedUnetBasedModel):
         return self._output_nc
 
     def _set_input(self, data):
-        """Unpack input data from the dataloader and perform necessary pre-processing steps.
-        """
+        """Unpack input data from the dataloader and perform necessary pre-processing steps."""
         assert len(data.pos.shape) == 3
         data = data.to(self.device)
         if data.x is not None:
@@ -152,7 +128,7 @@ class PointNet2Encoder(BasePointnet2):
 
 class PointNet2Unet(BasePointnet2):
     def forward(self, data, *args, **kwargs):
-        """ This method does a forward on the Unet assuming symmetrical skip connections
+        """This method does a forward on the Unet assuming symmetrical skip connections
         Input --- D1 -- D2 -- I -- U1 -- U2 -- U3 -- output
            |       |      |________|      |    |
            |       |______________________|    |
