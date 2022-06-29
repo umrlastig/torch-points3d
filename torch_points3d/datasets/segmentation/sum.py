@@ -157,9 +157,17 @@ class SUMPointCloudDataset(Dataset):
         points = plydata['vertex']
         pos = np.stack((points['x'], points['y'], points['z']), axis=1)
         normal = np.stack((points['nx'], points['ny'], points['nz']), axis=1)
+        if 'red' in points:
         rgb = np.stack((points['red'], points['green'], points['blue']), axis=1)
+        else:
+            rgb = np.stack((points['r'], points['g'], points['b']), axis=1)
         y = points['label'] - 1
+        y[y < 0] = -1
+        if 'face_id' in points:
         fid = points['face_id']
+        else:
+            fid = points['points_face_belong_id']
+        if 'fnx' in points:
         fnormal = np.stack((points['fnx'], points['fny'], points['fnz']), axis=1)
         
         data = Data(
@@ -168,7 +176,7 @@ class SUMPointCloudDataset(Dataset):
             rgb=torch.from_numpy(rgb.copy()),
             y=torch.from_numpy(y.astype(np.long)),
             fid=torch.from_numpy(fid.astype(np.long)),
-            fnormal=torch.from_numpy(fnormal.astype(np.float32)))
+            fnormal=torch.from_numpy(fnormal.astype(np.float32)) if 'fnx' in points else None)
         return data
 
     def process(self):
