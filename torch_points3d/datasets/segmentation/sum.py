@@ -152,23 +152,23 @@ class SUMPointCloudDataset(Dataset):
         exit(1)
 
     @staticmethod
-    def process_one(file:str):
+    def process_one(mesh_id:int, file:str):
         plydata = PlyData.read(file)
         points = plydata['vertex']
         pos = np.stack((points['x'], points['y'], points['z']), axis=1)
         normal = np.stack((points['nx'], points['ny'], points['nz']), axis=1)
         if 'red' in points:
-        rgb = np.stack((points['red'], points['green'], points['blue']), axis=1)
+            rgb = np.stack((points['red'], points['green'], points['blue']), axis=1)
         else:
             rgb = np.stack((points['r'], points['g'], points['b']), axis=1)
         y = points['label'] - 1
         y[y < 0] = -1
         if 'face_id' in points:
-        fid = points['face_id']
+            fid = points['face_id']
         else:
             fid = points['points_face_belong_id']
         if 'fnx' in points:
-        fnormal = np.stack((points['fnx'], points['fny'], points['fnz']), axis=1)
+            fnormal = np.stack((points['fnx'], points['fny'], points['fnz']), axis=1)
         
         data = Data(
             pos=torch.from_numpy(pos.astype(np.float32)),
@@ -176,6 +176,7 @@ class SUMPointCloudDataset(Dataset):
             rgb=torch.from_numpy(rgb.copy()),
             y=torch.from_numpy(y.astype(np.long)),
             fid=torch.from_numpy(fid.astype(np.long)),
+            mesh=mesh_id*torch.ones(pos.shape[0], dtype=torch.long),
             fnormal=torch.from_numpy(fnormal.astype(np.float32)) if 'fnx' in points else None)
         return data
 
@@ -184,10 +185,10 @@ class SUMPointCloudDataset(Dataset):
         print("Reading PLY files")
         if self.process_workers > 1:
             with Executor(max_workers=self.process_workers) as executor:
-                results = [executor.submit(self.process_one, file) for file in self.raw_paths]
+                results = [executor.submit(self.process_one, id, self.raw_paths[id]) for id in range(len(self.raw_paths))]
             data_list = [result.result() for result in results]
         else:
-            data_list = [self.process_one(file) for file in self.raw_paths]
+            data_list = [self.process_one(id, self.raw_paths[id]) for id in range(len(self.raw_paths))]
 
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]

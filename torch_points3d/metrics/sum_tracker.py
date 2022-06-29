@@ -85,6 +85,22 @@ class SUMTracker(SegmentationTracker):
             per_class_iou = c.get_intersection_union_per_class()[0]
             self._vote_iou_per_class = {self._dataset.INV_OBJECT_LABEL[k]: "{:.2f}".format(100 * v) for k, v in enumerate(per_class_iou)}
 
+            mesh_id = self._data.mesh[has_prediction]
+            face_id = self._data.fid[has_prediction]
+            loggit = self._votes[has_prediction]
+            
+            index = torch.cat((mesh_id.reshape(-1,1),face_id.reshape(-1,1)), dim=1)
+            unique_index, index_map = index.unique(dim=0, return_inverse=True)
+            result = torch.zeros((unique_index.shape[0], loggit.shape[1]), dtype=loggit.dtype, device=loggit.device).scatter_add_(0, index_map.unsqueeze(1).expand_as(loggit), loggit)
+            face_pred = torch.argmax(result, 1)
+
+            raw_file_names = next((x for x in self._dataset.test_dataset if x.name == self._stage), None).raw_file_names
+
+            with open("face_labels.csv", "w") as face_label_file:
+                face_label_file.write("File,face_id,predicted_label\n")
+                for i in range(unique_index.shape[0]):
+                    face_label_file.write("{},{},{}\n".format(raw_file_names[unique_index[i,0]],unique_index[i,1],face_pred[i].item()))
+
             if ply_output:
                 pos = self._data.pos[has_prediction].detach().cpu().numpy()
                 rgb = (255*self._data.rgb[has_prediction].detach().cpu().numpy()).astype(np.uint8)
