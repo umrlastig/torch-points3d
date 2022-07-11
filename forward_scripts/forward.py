@@ -6,7 +6,7 @@ import os
 import sys
 import numpy as np
 from typing import Dict
-
+from plyfile import PlyData, PlyElement
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.join(DIR, "..")
@@ -23,6 +23,7 @@ from torch_points3d.datasets.base_dataset import BaseDataset
 # Import from metrics
 from torch_points3d.metrics.colored_tqdm import Coloredtqdm as Ctq
 from torch_points3d.metrics.model_checkpoint import ModelCheckpoint
+from torch_points3d.core.data_transform import SaveOriginalPosId
 
 # Utils import
 from torch_points3d.utils.colors import COLORS
@@ -38,18 +39,60 @@ def save(prefix, predicted):
 
 
 def run(model: BaseModel, dataset, device, output_path):
-    loaders = dataset.test_dataloaders
-    predicted: Dict = {}
-    for loader in loaders:
-        loader.dataset.name
-        with Ctq(loader) as tq_test_loader:
+    for i in range(len(dataset.test_dataset)):
+        
+        with open(dataset.test_dataset[i].raw_paths[0], "rb") as ply_file:
+            plydata = PlyData.read(ply_file)
+
+        votes = torch.zeros((plydata["vertex"].data['x'].shape[0], dataset.test_dataset[i].num_classes), dtype=torch.float)
+        prediction_count = torch.zeros(plydata["vertex"].data['x'].shape[0], dtype=torch.int)
+
+        with Ctq(dataset.test_dataloaders[i]) as tq_test_loader:
             for data in tq_test_loader:
                 with torch.no_grad():
                     model.set_input(data, device)
                     model.forward()
-                predicted = {**predicted, **dataset.predict_original_samples(data, model.conv_type, model.get_output())}
 
-    save(output_path, predicted)
+                originids = data[SaveOriginalPosId.KEY]
+                votes[originids] += model.get_output().cpu()
+                prediction_count[originids] += 1
+        
+        mask = prediction_count >= 1
+        pred = torch.argmax(votes[mask], dim=1).numpy()
+        mask = mask.numpy()
+
+        if 'scalar_clasa' in plydata["vertex"].data.dtype.names:
+
+            label = plydata['vertex']['scalar_clasa'][mask]
+
+            ply_array = np.ones(
+                mask.sum(), dtype=[("x", "f4"), ("y", "f4"), ("z", "f4"), ("red", "u1"), ("green", "u1"), ("blue", "u1"), ("l", "i4"), ("p", "i4"), ("error", "i4")]
+            )
+            ply_array["x"] = plydata['vertex']['x'][mask]
+            ply_array["y"] = plydata['vertex']['y'][mask]
+            ply_array["z"] = plydata['vertex']['z'][mask]
+            ply_array["red"] = plydata['vertex']['red'][mask]
+            ply_array["green"] = plydata['vertex']['green'][mask]
+            ply_array["blue"] = plydata['vertex']['blue'][mask]
+            ply_array["l"] = label
+            ply_array["p"] = pred
+            ply_array["error"] = (label != pred)
+            el = PlyElement.describe(ply_array, "vertex")
+            PlyData([el]).write("{}.ply".format(dataset.test_dataset[i].name))
+
+        else:
+            ply_array = np.ones(
+                mask.sum(), dtype=[("x", "f4"), ("y", "f4"), ("z", "f4"), ("red", "u1"), ("green", "u1"), ("blue", "u1"), ("p", "i4")]
+            )
+            ply_array["x"] = plydata['vertex']['x'][mask]
+            ply_array["y"] = plydata['vertex']['y'][mask]
+            ply_array["z"] = plydata['vertex']['z'][mask]
+            ply_array["red"] = plydata['vertex']['red'][mask]
+            ply_array["green"] = plydata['vertex']['green'][mask]
+            ply_array["blue"] = plydata['vertex']['blue'][mask]
+            ply_array["p"] = pred
+            el = PlyElement.describe(ply_array, "vertex")
+            PlyData([el]).write("{}.ply".format(dataset.test_dataset[i].name))
 
 
 @hydra.main(config_path="conf/config.yaml")
@@ -57,7 +100,12 @@ def main(cfg):
     OmegaConf.set_struct(cfg, False)
 
     # Get device
-    device = torch.device("cuda" if (torch.cuda.is_available() and cfg.cuda) else "cpu")
+    if cfg.cuda > -1 and torch.cuda.is_available():
+        device = "cuda"
+        torch.cuda.set_device(cfg.cuda)
+    else:
+        device = "cpu"
+    device = torch.device(device)
     log.info("DEVICE : {}".format(device))
 
     # Enable CUDNN BACKEND
@@ -69,7 +117,6 @@ def main(cfg):
     # Setup the dataset config
     # Generic config
     train_dataset_cls = get_dataset_class(checkpoint.data_config)
-    setattr(checkpoint.data_config, "class", train_dataset_cls.FORWARD_CLASS)
     setattr(checkpoint.data_config, "dataroot", cfg.input_path)
 
     # Datset specific configs

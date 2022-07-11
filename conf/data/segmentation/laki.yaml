@@ -1,0 +1,67 @@
+data:
+  class: laki.LAKIDataset
+  dataset_name: laki
+  task: segmentation
+  dataroot: data
+  train_sphere_count: 1000
+  val_sphere_count: 100
+  sphere_size: 1000
+  first_subsampling: 0.1
+  use_category: False
+
+  pre_transform:
+    - transform: SaveOriginalPosId
+    - transform: NormalizeFeature
+      params:
+        feature_name: intensity
+        standardize: False
+    - transform: NormalizeRGB
+      params:
+        normalize: True
+
+  train_transform:
+    - transform: RandomNoise
+      params:
+        sigma: 0.001
+    - transform: RandomRotate
+      params:
+        degrees: 180
+        axis: 2
+    - transform: RandomScaleAnisotropic
+      params:
+        scales: [0.8, 1.2]
+    - transform: RandomSymmetry
+      params:
+        axis: [True, False, False]
+    - transform: DropFeature
+      params:
+        drop_proba: 0.2
+        feature_name: rgb
+    - transform: XYZFeature
+      params:
+        add_x: False
+        add_y: False
+        add_z: True
+    - transform: AddOnes
+    - transform: AddFeatsByKeys
+      params:
+        list_add_to_x: [True, True, True, True, True, False]
+        feat_names: [rgb, normal, intensity, returns, pos_z, ones]
+        delete_feats: [False, True, True, True, True, True]
+    - transform: Center
+
+  test_transform:
+    - transform: XYZFeature
+      params:
+        add_x: False
+        add_y: False
+        add_z: True
+    - transform: AddOnes
+    - transform: AddFeatsByKeys
+      params:
+        list_add_to_x: [True, True, True, True, True, False]
+        feat_names: [rgb, normal, intensity, returns, pos_z, ones]
+        delete_feats: [False, True, True, True, True, True]
+    - transform: Center
+  
+  val_transform: ${data.test_transform}
